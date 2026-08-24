@@ -215,6 +215,78 @@ export function createHttpServer() {
       }
     }
 
+    // 5b. POST /api/v1/leads/:id/sms (Dispatcher Live 2-Way SMS)
+    if (req.method === 'POST' && pathname?.includes('/sms')) {
+      const id = pathname.split('/')[4];
+      const body = await readBody();
+      const lead = serverStore.getLead(id);
+      if (!lead) return sendJson(404, { success: false, error: 'Lead not found' });
+      
+      const now = new Date();
+      if (!lead.sms_thread) {
+        lead.sms_thread = [
+          {
+            id: `msg_1`,
+            sender: 'SENTINEL_AUTO',
+            text: lead.rescue_payload?.message_body || 'Hi, this is Dispatch. We noticed we just missed your call...',
+            timestamp: lead.created_at,
+          },
+          {
+            id: `msg_2`,
+            sender: 'CUSTOMER',
+            text: 'Yes please! How soon can someone get here?',
+            timestamp: new Date(new Date(lead.created_at).getTime() + 8000).toISOString(),
+          }
+        ];
+      }
+      
+      lead.sms_thread.push({
+        id: `msg_${Math.random().toString(36).substring(2, 9)}`,
+        sender: 'DISPATCHER',
+        text: body.message || 'Priority technician assigned to your property.',
+        timestamp: now.toISOString(),
+      });
+
+      lead.audit_trail.push({
+        id: `evt_${Math.random().toString(36).substring(2, 9)}`,
+        lead_id: id,
+        timestamp: now.toISOString(),
+        action: 'DISPATCHER_SMS_SENT',
+        actor: 'DISPATCHER',
+        details: { message: body.message },
+      });
+
+      return sendJson(200, { success: true, lead });
+    }
+
+    // 5c. POST /api/v1/leads/:id/assign (Technician Truck Assignment)
+    if (req.method === 'POST' && pathname?.includes('/assign')) {
+      const id = pathname.split('/')[4];
+      const body = await readBody();
+      const lead = serverStore.getLead(id);
+      if (!lead) return sendJson(404, { success: false, error: 'Lead not found' });
+
+      lead.assigned_technician = {
+        name: body.technician_name || 'Jake Miller',
+        truck: body.truck || 'Truck 4',
+        eta_minutes: body.eta_minutes || 25,
+        status: 'DISPATCHED_IN_ROUTE',
+      };
+      lead.status = 'DISPATCHER_ENGAGED';
+
+      const now = new Date();
+      lead.audit_trail.push({
+        id: `evt_${Math.random().toString(36).substring(2, 9)}`,
+        lead_id: id,
+        timestamp: now.toISOString(),
+        action: 'TECHNICIAN_DISPATCHED',
+        actor: 'DISPATCHER',
+        details: lead.assigned_technician,
+      });
+
+      return sendJson(200, { success: true, lead });
+    }
+
     // 6. GET /api/v1/metrics
     if (req.method === 'GET' && pathname === '/api/v1/metrics') {
       const metrics = serverStore.calculateMetrics();
@@ -1175,35 +1247,59 @@ function renderWorldClassHtml() {
             <p class="text-xs text-slate-200 mt-1 leading-relaxed">\${selectedLead.raw_inquiry_text}</p>
           </div>
 
-          <!-- Live SMS Auto-Rescue Stream -->
+          <!-- Live SMS Auto-Rescue Stream & Interactive Composer -->
           <div class="space-y-2.5">
             <div class="flex items-center justify-between">
-              <span class="text-xs font-mono font-semibold uppercase text-slate-300 flex items-center gap-1.5">
-                💬 Automated SMS Rescue Thread
+              <span class="text-xs font-mono font-semibold uppercase text-blue-400 flex items-center gap-1.5">
+                💬 2-Way SMS Thread & Live Composer
               </span>
-              <span class="text-[10px] font-mono text-emerald-400">DELIVERED (Sub-2s)</span>
+              <span class="text-[10px] font-mono text-emerald-400">● LIVE CONNECTION</span>
             </div>
 
-            <div class="p-4 rounded-xl bg-[#090E1A] border border-slate-800 space-y-3">
-              <!-- Outbound Sentinel SMS -->
-              <div class="flex flex-col items-end">
-                <div class="max-w-md p-3 rounded-2xl rounded-tr-sm bg-blue-600 text-white text-xs shadow-md">
-                  <p>\${selectedLead.rescue_payload?.message_body || 'Hi there, we noticed we just missed your call...'}</p>
+            <div id="sms-messages-container" class="p-4 rounded-xl bg-[#090E1A] border border-slate-800 space-y-3 max-h-60 overflow-y-auto">
+              \${(selectedLead.sms_thread || [
+                { sender: 'SENTINEL_AUTO', text: selectedLead.rescue_payload?.message_body || 'Hi, this is Dispatch. We noticed we just missed your call...', timestamp: selectedLead.created_at },
+                { sender: 'CUSTOMER', text: 'Yes please! How soon can someone get here?', timestamp: new Date(new Date(selectedLead.created_at).getTime() + 10000).toISOString() }
+              ]).map(msg => msg.sender === 'CUSTOMER' ? \`
+                <div class="flex flex-col items-start">
+                  <div class="max-w-[85%] p-3 rounded-2xl rounded-tl-sm bg-slate-800 text-slate-200 text-xs border border-slate-700">
+                    <p>\${msg.text}</p>
+                  </div>
+                  <span class="text-[10px] font-mono text-slate-500 mt-1">\${selectedLead.customer_name} • \${new Date(msg.timestamp).toLocaleTimeString()}</span>
                 </div>
-                <span class="text-[10px] font-mono text-slate-500 mt-1">LeadPulse Sentinel • 14:02:11</span>
-              </div>
+              \` : \`
+                <div class="flex flex-col items-end">
+                  <div class="max-w-[85%] p-3 rounded-2xl rounded-tr-sm bg-blue-600 text-white text-xs shadow-md">
+                    <p>\${msg.text}</p>
+                  </div>
+                  <span class="text-[10px] font-mono text-slate-500 mt-1">\${msg.sender === 'SENTINEL_AUTO' ? 'Sentinel Auto-Rescue' : 'Dispatcher'} • \${new Date(msg.timestamp).toLocaleTimeString()}</span>
+                </div>
+              \`).join('')}
+            </div>
 
-              <!-- Customer Simulated Reply -->
-              <div class="flex flex-col items-start">
-                <div class="max-w-md p-3 rounded-2xl rounded-tl-sm bg-slate-800 text-slate-200 text-xs border border-slate-700">
-                  <p>Yes please, we need someone immediately! How soon can a technician get here?</p>
-                </div>
-                <span class="text-[10px] font-mono text-slate-500 mt-1">\${selectedLead.customer_name} • 14:02:48</span>
-              </div>
+            <!-- Quick Response Macro Chips -->
+            <div class="flex flex-wrap gap-1.5 pt-1">
+              <button onclick="setSmsInput('Technician Jake is on active route to your property (ETA ~25 mins).')" class="text-[11px] font-mono px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/60 transition-colors">
+                🚛 Jake in Route (25m)
+              </button>
+              <button onclick="setSmsInput('Could you please reply with any property gate codes or parking instructions?')" class="text-[11px] font-mono px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/60 transition-colors">
+                🔑 Request Gate Code
+              </button>
+              <button onclick="setSmsInput('Your priority arrival window has been locked into the dispatch queue.')" class="text-[11px] font-mono px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/60 transition-colors">
+                ⏱️ Priority Slot Held
+              </button>
+            </div>
+
+            <!-- Dispatcher SMS Input Field -->
+            <div class="flex items-center gap-2 pt-1">
+              <input type="text" id="drawer-sms-input" placeholder="Type custom SMS message to customer..." onkeydown="if(event.key==='Enter') sendCustomSms('\${selectedLead.id}')" class="flex-1 bg-slate-900/90 border border-slate-800 text-xs text-white placeholder-slate-500 rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500" />
+              <button onclick="sendCustomSms('\${selectedLead.id}')" class="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md transition-all active:scale-95">
+                Send
+              </button>
             </div>
 
             <!-- Customer Booking Portal Link Trigger -->
-            <div class="p-3 rounded-xl bg-blue-950/30 border border-blue-800/40 flex items-center justify-between">
+            <div class="p-3 rounded-xl bg-blue-950/30 border border-blue-800/40 flex items-center justify-between mt-2">
               <div>
                 <span class="text-xs font-semibold text-blue-300">Customer Self-Booking Portal</span>
                 <p class="text-[10px] text-slate-400 font-mono">Token: \${bookingUrl}</p>
@@ -1211,6 +1307,31 @@ function renderWorldClassHtml() {
               <a href="/book/\${selectedLead.id}" target="_blank" class="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors">
                 Open Portal ↗
               </a>
+            </div>
+          </div>
+
+          <!-- Technician Fleet Truck Assignment Box -->
+          <div class="space-y-2">
+            <span class="text-xs font-mono font-semibold uppercase text-emerald-400 flex items-center gap-1.5">
+              ⚡ Fleet Truck Dispatch Roster
+            </span>
+            <div class="p-3.5 rounded-xl bg-[#090E1A] border border-emerald-900/40 space-y-2.5">
+              <div class="grid grid-cols-2 gap-2">
+                <button onclick="dispatchTech('\${selectedLead.id}', 'Jake Miller', 'Truck 4', 20)" class="p-2.5 rounded-xl border border-emerald-500/50 bg-emerald-950/20 hover:bg-emerald-950/40 text-left transition-all">
+                  <div class="text-xs font-bold text-white">🚛 Jake Miller</div>
+                  <div class="text-[10px] text-emerald-400 font-mono mt-0.5">Truck 4 • 2.8 mi away</div>
+                </button>
+                <button onclick="dispatchTech('\${selectedLead.id}', 'Dave Sanchez', 'Truck 2', 35)" class="p-2.5 rounded-xl border border-slate-800 bg-slate-900/60 hover:bg-slate-900 text-left transition-all">
+                  <div class="text-xs font-bold text-slate-200">🚛 Dave Sanchez</div>
+                  <div class="text-[10px] text-slate-400 font-mono mt-0.5">Truck 2 • 6.4 mi away</div>
+                </button>
+              </div>
+              \${selectedLead.assigned_technician ? \`
+                <div class="p-2 rounded-lg bg-emerald-950/60 border border-emerald-700/60 font-mono text-[11px] text-emerald-300 flex items-center justify-between">
+                  <span>Assigned: \${selectedLead.assigned_technician.name} (\${selectedLead.assigned_technician.truck})</span>
+                  <span class="font-bold">ETA: ~\${selectedLead.assigned_technician.eta_minutes}m</span>
+                </div>
+              \` : ''}
             </div>
           </div>
 
@@ -1238,6 +1359,49 @@ function renderWorldClassHtml() {
           </button>
         </div>
       \`;
+    }
+
+    function setSmsInput(text) {
+      const input = document.getElementById('drawer-sms-input');
+      if (input) {
+        input.value = text;
+        input.focus();
+      }
+    }
+
+    async function sendCustomSms(leadId) {
+      const input = document.getElementById('drawer-sms-input');
+      if (!input || !input.value.trim()) return;
+      const msg = input.value.trim();
+      input.value = '';
+      playSound('rescue');
+
+      const res = await fetch(\`/api/v1/leads/\${leadId}/sms\`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg })
+      });
+      const data = await res.json();
+      if (data.success) {
+        selectedLead = data.lead;
+        renderDrawerContent();
+        fetchState();
+      }
+    }
+
+    async function dispatchTech(leadId, techName, truck, eta) {
+      playSound('rescue');
+      const res = await fetch(\`/api/v1/leads/\${leadId}/assign\`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ technician_name: techName, truck: truck, eta_minutes: eta })
+      });
+      const data = await res.json();
+      if (data.success) {
+        selectedLead = data.lead;
+        renderDrawerContent();
+        fetchState();
+      }
     }
 
     function openSimulatorModal() {
