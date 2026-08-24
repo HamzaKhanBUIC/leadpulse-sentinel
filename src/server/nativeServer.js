@@ -789,8 +789,9 @@ function renderWorldClassHtml() {
 
       </section>
 
-      <!-- Filter Rail & Channel Tabs -->
+      <!-- View Switcher & Filter Rail -->
       <section class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-1 border-b border-white/[0.06]">
+        <!-- Left: Channel Filter Pills -->
         <div class="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 w-full sm:w-auto">
           <button onclick="setFilter('channel', 'ALL')" id="tab-all" class="channel-tab px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-white border border-slate-700 flex items-center gap-1.5">
             All Inbounds <span id="count-all" class="font-mono text-[10px] px-1.5 py-0.2 rounded bg-slate-900 text-slate-300">0</span>
@@ -806,8 +807,22 @@ function renderWorldClassHtml() {
           </button>
         </div>
 
-        <!-- Trade & Urgency Selectors -->
-        <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+        <!-- Right: View Switcher (Table / Kanban / Fleet Map) & Filters -->
+        <div class="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+          <!-- View Modes -->
+          <div class="flex items-center p-1 rounded-lg bg-slate-900/90 border border-slate-800 text-xs font-mono">
+            <button onclick="switchView('table')" id="view-btn-table" class="px-2.5 py-1 rounded bg-blue-600 text-white font-semibold flex items-center gap-1 transition-all">
+              <span>📊 Radar</span>
+            </button>
+            <button onclick="switchView('kanban')" id="view-btn-kanban" class="px-2.5 py-1 rounded text-slate-400 hover:text-white flex items-center gap-1 transition-all">
+              <span>📋 Kanban</span>
+            </button>
+            <button onclick="switchView('map')" id="view-btn-map" class="px-2.5 py-1 rounded text-slate-400 hover:text-white flex items-center gap-1 transition-all">
+              <span>🗺️ Map</span>
+            </button>
+          </div>
+
+          <!-- Trade & Urgency Dropdowns -->
           <select id="filter-trade" onchange="applyFilters()" class="text-xs bg-slate-900/90 border border-slate-800 text-slate-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-blue-500">
             <option value="ALL">All Trades</option>
             <option value="HVAC">HVAC</option>
@@ -818,7 +833,7 @@ function renderWorldClassHtml() {
           </select>
           <select id="filter-urgency" onchange="applyFilters()" class="text-xs bg-slate-900/90 border border-slate-800 text-slate-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-blue-500">
             <option value="ALL">All Urgencies</option>
-            <option value="CRITICAL">🔴 Critical Only</option>
+            <option value="CRITICAL">🔴 Critical</option>
             <option value="HIGH">🟠 High</option>
             <option value="MEDIUM">🔵 Medium</option>
             <option value="LOW">⚪ Low</option>
@@ -826,8 +841,8 @@ function renderWorldClassHtml() {
         </div>
       </section>
 
-      <!-- Live Triage Radar Table Container -->
-      <section class="glass-card rounded-xl overflow-hidden shadow-2xl">
+      <!-- View 1: Live Triage Radar Table Container -->
+      <section id="view-container-table" class="glass-card rounded-xl overflow-hidden shadow-2xl">
         <div class="p-4 border-b border-white/[0.08] bg-[#0C1322] flex items-center justify-between">
           <div class="flex items-center gap-2">
             <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
@@ -856,6 +871,72 @@ function renderWorldClassHtml() {
           </table>
         </div>
       </section>
+
+      <!-- View 2: Tactical Kanban Pipeline Board -->
+      <section id="view-container-kanban" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- 4 Kanban Columns Injected Dynamically -->
+        <div class="glass-card rounded-xl p-3.5 space-y-3 flex flex-col">
+          <div class="flex items-center justify-between pb-2 border-b border-white/[0.08]">
+            <span class="font-mono text-xs font-bold text-rose-400 flex items-center gap-1.5">
+              <span>⚡ Inbound Triage</span>
+              <span id="kanban-count-inbound" class="px-1.5 py-0.2 rounded bg-rose-950 text-rose-300 text-[10px]">0</span>
+            </span>
+          </div>
+          <div id="kanban-col-inbound" class="space-y-2.5 flex-1 min-h-[220px]"></div>
+        </div>
+
+        <div class="glass-card rounded-xl p-3.5 space-y-3 flex flex-col">
+          <div class="flex items-center justify-between pb-2 border-b border-white/[0.08]">
+            <span class="font-mono text-xs font-bold text-blue-400 flex items-center gap-1.5">
+              <span>💬 Auto-Rescue Sent</span>
+              <span id="kanban-count-sent" class="px-1.5 py-0.2 rounded bg-blue-950 text-blue-300 text-[10px]">0</span>
+            </span>
+          </div>
+          <div id="kanban-col-sent" class="space-y-2.5 flex-1 min-h-[220px]"></div>
+        </div>
+
+        <div class="glass-card rounded-xl p-3.5 space-y-3 flex flex-col">
+          <div class="flex items-center justify-between pb-2 border-b border-white/[0.08]">
+            <span class="font-mono text-xs font-bold text-amber-400 flex items-center gap-1.5">
+              <span>📅 Slot Reserved</span>
+              <span id="kanban-count-booked" class="px-1.5 py-0.2 rounded bg-amber-950 text-amber-300 text-[10px]">0</span>
+            </span>
+          </div>
+          <div id="kanban-col-booked" class="space-y-2.5 flex-1 min-h-[220px]"></div>
+        </div>
+
+        <div class="glass-card rounded-xl p-3.5 space-y-3 flex flex-col">
+          <div class="flex items-center justify-between pb-2 border-b border-white/[0.08]">
+            <span class="font-mono text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+              <span>🛡️ Rescued & Dispatched</span>
+              <span id="kanban-count-rescued" class="px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 text-[10px]">0</span>
+            </span>
+          </div>
+          <div id="kanban-col-rescued" class="space-y-2.5 flex-1 min-h-[220px]"></div>
+        </div>
+      </section>
+
+      <!-- View 3: Live Fleet & Incident Spatial Radar Map -->
+      <section id="view-container-map" class="hidden glass-card rounded-xl p-5 space-y-4 shadow-2xl relative overflow-hidden">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-200 font-mono">Austin Metro Live Fleet & Incident Spatial Radar</h2>
+          </div>
+          <div class="flex items-center gap-3 font-mono text-[11px] text-slate-400">
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-rose-500"></span> Inbound Emergency</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-400"></span> Active Fleet Truck</span>
+          </div>
+        </div>
+
+        <div id="map-radar-viewport" class="w-full h-[420px] bg-[#060911] rounded-xl border border-slate-800 relative overflow-hidden flex items-center justify-center">
+          <!-- Dynamic SVG Radar Map Injected via JavaScript -->
+        </div>
+      </section>
+    </main>
+
+    <!-- Floating Toast Notification HUD -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
     </main>
 
     <!-- Slide-Over Lead Detail Inspector Drawer -->
@@ -952,38 +1033,62 @@ function renderWorldClassHtml() {
   <script>
     let allLeads = [];
     let activeFilter = { channel: 'ALL', trade: 'ALL', urgency: 'ALL', search: '' };
+    let currentView = 'table';
     let selectedLead = null;
     let audioEnabled = true;
 
-    // Web Audio Sound Synthesizer
+    // Web Audio Sound Synthesizer with Multi-Tone Soundboard
     const audioCtx = (window.AudioContext || window.webkitAudioContext) ? new (window.AudioContext || window.webkitAudioContext)() : null;
 
     function playSound(type) {
       if (!audioEnabled || !audioCtx) return;
       try {
         if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.connect(gain);
         gain.connect(audioCtx.destination);
 
         if (type === 'rescue') {
-          osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
-          osc.frequency.exponentialRampToValueAtTime(880.00, audioCtx.currentTime + 0.15); // A5
-          gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
-          osc.start();
-          osc.stop(audioCtx.currentTime + 0.25);
+          // Melodic Ascending Major Chord
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(523.25, now); // C5
+          osc.frequency.exponentialRampToValueAtTime(783.99, now + 0.12); // G5
+          gain.gain.setValueAtTime(0.18, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.28);
+          osc.start(now);
+          osc.stop(now + 0.28);
+        } else if (type === 'dispatch') {
+          // Tactical Confirmation Pulse
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(329.63, now); // E4
+          osc.frequency.setValueAtTime(659.25, now + 0.08); // E5
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.22);
+          osc.start(now);
+          osc.stop(now + 0.22);
+        } else if (type === 'alert') {
+          // Dual-Tone Beacon Alert
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(880, now); // A5
+          osc.frequency.setValueAtTime(587.33, now + 0.1); // D5
+          gain.gain.setValueAtTime(0.12, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+          osc.start(now);
+          osc.stop(now + 0.25);
         } else if (type === 'burst') {
-          osc.frequency.setValueAtTime(440, audioCtx.currentTime);
-          osc.frequency.exponentialRampToValueAtTime(659.25, audioCtx.currentTime + 0.1);
-          gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
-          osc.start();
-          osc.stop(audioCtx.currentTime + 0.2);
+          // Rapid Ingress Sweep
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(330, now);
+          osc.frequency.exponentialRampToValueAtTime(880, now + 0.15);
+          gain.gain.setValueAtTime(0.15, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+          osc.start(now);
+          osc.stop(now + 0.25);
         }
       } catch (e) {
-        console.warn('Audio play error:', e);
+        console.warn('Audio synthesis error:', e);
       }
     }
 
@@ -993,6 +1098,53 @@ function renderWorldClassHtml() {
       btn.className = audioEnabled 
         ? 'p-1.5 text-emerald-400 rounded-lg bg-slate-900 border border-slate-800' 
         : 'p-1.5 text-slate-500 rounded-lg bg-slate-900 border border-slate-800';
+      showToast(audioEnabled ? 'Sound Synthesizer Active' : 'Sound Muted', audioEnabled ? 'Tactile audio feedback enabled' : 'Muted all acoustic signals', 'info');
+    }
+
+    function showToast(title, message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const toast = document.createElement('div');
+      let borderClass = 'border-emerald-500/40 bg-emerald-950/90 text-emerald-300';
+      let icon = '✓';
+      if (type === 'info') { borderClass = 'border-blue-500/40 bg-blue-950/90 text-blue-300'; icon = 'ℹ'; }
+      if (type === 'alert') { borderClass = 'border-rose-500/40 bg-rose-950/90 text-rose-300'; icon = '⚡'; }
+
+      toast.className = \`pointer-events-auto p-3.5 rounded-xl border \${borderClass} shadow-2xl backdrop-blur-md flex items-start gap-3 max-w-sm transition-all duration-300 transform translate-y-2 opacity-0 font-sans text-xs\`;
+      toast.innerHTML = \`
+        <span class="text-base">\${icon}</span>
+        <div class="flex-1">
+          <div class="font-bold text-white">\${title}</div>
+          <div class="text-[11px] text-slate-300 mt-0.5">\${message}</div>
+        </div>
+      \`;
+      container.appendChild(toast);
+      setTimeout(() => { toast.classList.remove('translate-y-2', 'opacity-0'); }, 10);
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    function switchView(mode) {
+      currentView = mode;
+      document.querySelectorAll('#view-btn-table, #view-btn-kanban, #view-btn-map').forEach(btn => {
+        btn.className = 'px-2.5 py-1 rounded text-slate-400 hover:text-white flex items-center gap-1 transition-all';
+      });
+      const activeBtn = document.getElementById(\`view-btn-\${mode}\`);
+      if (activeBtn) activeBtn.className = 'px-2.5 py-1 rounded bg-blue-600 text-white font-semibold flex items-center gap-1 transition-all shadow-md';
+
+      document.getElementById('view-container-table').classList.toggle('hidden', mode !== 'table');
+      document.getElementById('view-container-kanban').classList.toggle('hidden', mode !== 'kanban');
+      document.getElementById('view-container-map').classList.toggle('hidden', mode !== 'map');
+
+      renderCurrentView();
+    }
+
+    function renderCurrentView() {
+      if (currentView === 'table') renderTable();
+      else if (currentView === 'kanban') renderKanban();
+      else if (currentView === 'map') renderFleetMap();
     }
 
     async function fetchState() {
@@ -1017,7 +1169,7 @@ function renderWorldClassHtml() {
         if (leadsJson.success) {
           allLeads = leadsJson.leads;
           updateCounts();
-          renderTable();
+          renderCurrentView();
           if (selectedLead) {
             const updated = allLeads.find(l => l.id === selectedLead.id);
             if (updated) {
@@ -1047,13 +1199,13 @@ function renderWorldClassHtml() {
       if (val === 'MISSED_CALL') document.getElementById('tab-calls').className = 'channel-tab px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-white border border-slate-700 flex items-center gap-1.5';
       if (val === 'WEB_FORM') document.getElementById('tab-forms').className = 'channel-tab px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-white border border-slate-700 flex items-center gap-1.5';
       if (val === 'AFTER_HOURS') document.getElementById('tab-after').className = 'channel-tab px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-white border border-slate-700 flex items-center gap-1.5';
-      renderTable();
+      renderCurrentView();
     }
 
     function applyFilters() {
       activeFilter.trade = document.getElementById('filter-trade').value;
       activeFilter.urgency = document.getElementById('filter-urgency').value;
-      renderTable();
+      renderCurrentView();
     }
 
     function getFilteredLeads() {
@@ -1071,6 +1223,127 @@ function renderWorldClassHtml() {
         }
         return true;
       });
+    }
+
+    function renderKanban() {
+      const filtered = getFilteredLeads();
+      const now = Date.now();
+
+      const buckets = {
+        inbound: filtered.filter(l => l.status === 'INGESTED'),
+        sent: filtered.filter(l => l.status === 'AUTO_RESCUE_SENT' || l.status === 'DISPATCHER_ENGAGED'),
+        booked: filtered.filter(l => l.status === 'APPOINTMENT_BOOKED'),
+        rescued: filtered.filter(l => l.status === 'RESCUED' || l.status === 'LOST_BREACHED')
+      };
+
+      document.getElementById('kanban-count-inbound').innerText = buckets.inbound.length;
+      document.getElementById('kanban-count-sent').innerText = buckets.sent.length;
+      document.getElementById('kanban-count-booked').innerText = buckets.booked.length;
+      document.getElementById('kanban-count-rescued').innerText = buckets.rescued.length;
+
+      const renderCard = (lead) => {
+        const expiresAt = new Date(lead.sla_expires_at).getTime();
+        const secondsLeft = Math.max(0, Math.floor((expiresAt - now) / 1000));
+        const isResolved = ['RESCUED', 'APPOINTMENT_BOOKED', 'LOST_BREACHED'].includes(lead.status);
+
+        let urgencyTag = 'bg-rose-950/80 text-rose-300 border-rose-600/80';
+        if (lead.urgency_tier === 'HIGH') urgencyTag = 'bg-amber-950/80 text-amber-300 border-amber-600/80';
+        if (lead.urgency_tier === 'MEDIUM') urgencyTag = 'bg-blue-950/80 text-blue-300 border-blue-600/80';
+
+        return \`
+          <div onclick="openLeadDetail('\${lead.id}')" class="p-3 rounded-xl bg-slate-900/90 border border-white/[0.08] hover:border-blue-500/50 cursor-pointer space-y-2.5 transition-all shadow-md group">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-mono px-1.5 py-0.2 rounded border \${urgencyTag}">\${lead.l_score} \${lead.urgency_tier}</span>
+              <span class="font-mono text-xs font-bold text-white">$\${lead.estimated_job_value_usd?.toLocaleString() || 500}</span>
+            </div>
+            <div>
+              <div class="font-bold text-white text-xs group-hover:text-blue-400 transition-colors">\${lead.customer_name}</div>
+              <div class="text-[10px] text-slate-400 font-mono">\${lead.trade} • \${lead.customer_phone}</div>
+            </div>
+            <p class="text-[11px] text-slate-300 line-clamp-2 leading-relaxed">\${lead.raw_inquiry_text}</p>
+            <div class="flex items-center justify-between pt-1 border-t border-white/[0.04] text-[10px] font-mono">
+              <span class="\${secondsLeft <= 60 && !isResolved ? 'text-rose-400 font-bold animate-pulse' : 'text-slate-400'}">
+                \${isResolved ? (lead.status === 'LOST_BREACHED' ? 'BREACHED' : 'RESOLVED') : \`⏱️ \${Math.floor(secondsLeft/60)}:\${secondsLeft%60 < 10 ? '0' : ''}\${secondsLeft%60}\`}
+              </span>
+              \${!isResolved ? \`
+                <button onclick="event.stopPropagation(); handleQuickAction('\${lead.id}', 'MARK_RESCUED')" class="px-2 py-0.5 rounded bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/50 font-bold transition-all">
+                  ✓ Rescue
+                </button>
+              \` : ''}
+            </div>
+          </div>
+        \`;
+      };
+
+      document.getElementById('kanban-col-inbound').innerHTML = buckets.inbound.length ? buckets.inbound.map(renderCard).join('') : '<div class="text-center py-8 text-slate-600 font-mono text-[11px]">No inbounds in triage</div>';
+      document.getElementById('kanban-col-sent').innerHTML = buckets.sent.length ? buckets.sent.map(renderCard).join('') : '<div class="text-center py-8 text-slate-600 font-mono text-[11px]">No active rescue queue</div>';
+      document.getElementById('kanban-col-booked').innerHTML = buckets.booked.length ? buckets.booked.map(renderCard).join('') : '<div class="text-center py-8 text-slate-600 font-mono text-[11px]">No reserved slots</div>';
+      document.getElementById('kanban-col-rescued').innerHTML = buckets.rescued.length ? buckets.rescued.map(renderCard).join('') : '<div class="text-center py-8 text-slate-600 font-mono text-[11px]">No resolved leads</div>';
+    }
+
+    function renderFleetMap() {
+      const container = document.getElementById('map-radar-viewport');
+      const filtered = getFilteredLeads();
+
+      // SVG Spatial Radar Viewport with Austin Metro Nodes
+      const incidents = filtered.map((l, i) => {
+        // Map deterministic mock coordinates around Austin
+        const coords = [
+          { x: 380, y: 190, name: 'Downtown Austin' },
+          { x: 510, y: 140, name: 'North Loop' },
+          { x: 260, y: 260, name: 'Westlake Hills' },
+          { x: 620, y: 220, name: 'East Riverside' },
+          { x: 440, y: 310, name: 'South Congress' }
+        ];
+        const pt = coords[i % coords.length];
+        const isCritical = l.urgency_tier === 'CRITICAL';
+        return \`
+          <g onclick="openLeadDetail('\${l.id}')" class="cursor-pointer group">
+            <circle cx="\${pt.x}" cy="\${pt.y}" r="18" fill="\${isCritical ? 'rgba(244,63,94,0.15)' : 'rgba(59,130,246,0.15)'}" class="animate-ping" />
+            <circle cx="\${pt.x}" cy="\${pt.y}" r="8" fill="\${isCritical ? '#FF2D55' : '#3B82F6'}" stroke="#FFFFFF" stroke-width="2" />
+            <rect x="\${pt.x - 60}" y="\${pt.y - 34}" width="120" height="22" rx="6" fill="#0F172A" stroke="rgba(255,255,255,0.15)" />
+            <text x="\${pt.x}" y="\${pt.y - 19}" fill="#FFFFFF" font-family="Plus Jakarta Sans" font-size="10" font-weight="700" text-anchor="middle">\${l.customer_name.split(' ')[0]} • $\${l.estimated_job_value_usd || 500}</text>
+          </g>
+        \`;
+      }).join('');
+
+      container.innerHTML = \`
+        <svg class="w-full h-full" viewBox="0 0 800 420" fill="none">
+          <!-- Background Radar Grid -->
+          <defs>
+            <radialGradient id="radar-glow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#06B6D4" stop-opacity="0.06"/>
+              <stop offset="100%" stop-color="#06B6D4" stop-opacity="0.0"/>
+            </radialGradient>
+          </defs>
+          <rect width="800" height="420" fill="url(#radar-glow)" />
+
+          <!-- Concentric Radar Rings -->
+          <circle cx="400" cy="210" r="80" stroke="rgba(255,255,255,0.05)" stroke-dasharray="4 4" fill="none" />
+          <circle cx="400" cy="210" r="160" stroke="rgba(255,255,255,0.05)" stroke-dasharray="4 4" fill="none" />
+          <circle cx="400" cy="210" r="240" stroke="rgba(255,255,255,0.04)" stroke-dasharray="4 4" fill="none" />
+          <line x1="400" y1="0" x2="400" y2="420" stroke="rgba(255,255,255,0.04)" />
+          <line x1="0" y1="210" x2="800" y2="210" stroke="rgba(255,255,255,0.04)" />
+
+          <!-- Active Fleet Trucks -->
+          <!-- Truck 4: Jake Miller -->
+          <g>
+            <circle cx="340" cy="160" r="10" fill="#10B981" stroke="#FFFFFF" stroke-width="2" />
+            <rect x="270" y="125" width="140" height="20" rx="5" fill="#064E3B" stroke="#059669" />
+            <text x="340" y="139" fill="#A7F3D0" font-family="JetBrains Mono" font-size="9" font-weight="700" text-anchor="middle">🚛 Jake Miller (Truck 4)</text>
+          </g>
+
+          <!-- Truck 2: Dave Sanchez -->
+          <g>
+            <circle cx="490" cy="280" r="10" fill="#10B981" stroke="#FFFFFF" stroke-width="2" />
+            <rect x="420" y="245" width="140" height="20" rx="5" fill="#064E3B" stroke="#059669" />
+            <text x="490" y="259" fill="#A7F3D0" font-family="JetBrains Mono" font-size="9" font-weight="700" text-anchor="middle">🚛 Dave Sanchez (Truck 2)</text>
+          </g>
+
+          <!-- Emergency Incident Pulsing Nodes -->
+          \${incidents}
+        </svg>
+      \`;
     }
 
     function renderTable() {
@@ -1178,7 +1451,13 @@ function renderWorldClassHtml() {
     }
 
     async function handleQuickAction(leadId, action) {
-      playSound('rescue');
+      if (action === 'MARK_RESCUED') {
+        playSound('rescue');
+        showToast('Lead Rescued & Secured', 'Emergency slot confirmed; revenue locked in ledger', 'success');
+      } else {
+        showToast('Lead Dismissed', 'Marked as unreachable/lost', 'alert');
+      }
+
       await fetch(\`/api/v1/leads/\${leadId}/action\`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1207,13 +1486,13 @@ function renderWorldClassHtml() {
       const now = Date.now();
       const expiresAt = new Date(selectedLead.sla_expires_at).getTime();
       const secondsLeft = Math.max(0, Math.floor((expiresAt - now) / 1000));
-      const bookingUrl = \`http://localhost:3001/book/\${selectedLead.id}\`;
+      const bookingUrl = \`http://\${window.location.host}/book/\${selectedLead.id}\`;
 
       drawer.innerHTML = \`
         <!-- Drawer Header -->
         <div class="p-5 border-b border-white/[0.08] bg-[#0A101D] flex items-center justify-between">
           <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-bold text-lg">
+            <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold text-lg shadow-inner">
               🛡️
             </div>
             <div>
@@ -1375,6 +1654,7 @@ function renderWorldClassHtml() {
       const msg = input.value.trim();
       input.value = '';
       playSound('rescue');
+      showToast('SMS Dispatched', 'Custom message sent to customer phone via 2-way thread', 'info');
 
       const res = await fetch(\`/api/v1/leads/\${leadId}/sms\`, {
         method: 'POST',
@@ -1390,7 +1670,9 @@ function renderWorldClassHtml() {
     }
 
     async function dispatchTech(leadId, techName, truck, eta) {
-      playSound('rescue');
+      playSound('dispatch');
+      showToast('Technician Dispatched', \`\${techName} (\${truck}) assigned with ~\${eta}m ETA\`, 'success');
+
       const res = await fetch(\`/api/v1/leads/\${leadId}/assign\`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1412,7 +1694,9 @@ function renderWorldClassHtml() {
     }
 
     async function injectPreset(preset) {
-      playSound('burst');
+      playSound('alert');
+      showToast('Scenario Injected', \`\${preset} emergency incident ingested with active SLA clock\`, 'alert');
+
       let payload = {
         channel: 'MISSED_CALL',
         customer_name: 'Robert Vance',
@@ -1457,6 +1741,8 @@ function renderWorldClassHtml() {
 
     async function triggerQuickBurst(count = 3) {
       playSound('burst');
+      showToast('Ingress Burst Active', \`+\${count} synthetic leads ingested into triage queue\`, 'info');
+
       await fetch('/api/v1/simulate/burst', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1467,6 +1753,7 @@ function renderWorldClassHtml() {
 
     async function clearDatabase() {
       await fetch('/api/v1/simulate/clear', { method: 'POST' });
+      showToast('State Reset', 'Database cleared and initialized to baseline state', 'info');
       closeSimulatorModal();
       fetchState();
     }

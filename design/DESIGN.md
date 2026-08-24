@@ -93,3 +93,4 @@
 * **Transition Easing**: `180ms cubic-bezier(0.2, 0, 0, 1)`.
 * **SLA Gauge Decay**: Smooth CSS `stroke-dashoffset` transition (`duration-1000 ease-linear`).
 * **Slide-Over Drawer**: Spring slide from right (`translate-x-0` with `backdrop-blur-md`).
+

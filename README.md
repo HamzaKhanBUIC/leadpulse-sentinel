@@ -33,14 +33,21 @@ Real-time telemetry dashboard featuring live SLA decay gauges, urgency scores, d
 
 ---
 
-### 2. Slide-Over Lead Inspector & Live SMS Stream
-Detailed customer dossier with dollar valuation breakdown, simulated 2-way SMS conversation thread, and immutable audit logging.
+### 2. Tactical Kanban Pipeline Board
+High-density visual dispatch workflow categorizing inbounds across 4 real-time SLA stages: *Inbound Triage*, *Auto-Rescue Sent*, *Slot Reserved*, and *Rescued & Dispatched*.
+
+![Tactical Kanban Pipeline Board](docs/assets/screenshots/kanban_pipeline_board.png)
+
+---
+
+### 3. Slide-Over Lead Inspector & Live 2-Way SMS Stream
+Detailed customer dossier with dollar valuation breakdown, interactive 2-way dispatcher SMS thread with macro chips, fleet truck assignment roster, and immutable audit logging.
 
 ![Lead Inspector Drawer](docs/assets/screenshots/lead_inspector_drawer.png)
 
 ---
 
-### 3. Customer-Facing Mobile Self-Booking Experience (`/book/:id`)
+### 4. Customer-Facing Mobile Self-Booking Experience (`/book/:id`)
 Apple-grade, trustworthy mobile reservation portal sent via SMS, allowing homeowners to reserve an emergency arrival window in under 30 seconds.
 
 <p align="center">
@@ -51,7 +58,7 @@ Apple-grade, trustworthy mobile reservation portal sent via SMS, allowing homeow
 
 ---
 
-### 4. Ingress Chaos Simulator & Command Palette (`⌘K`)
+### 5. Ingress Chaos Simulator & Command Palette (`⌘K`)
 Developer and dispatcher test bench for injecting high-concurrency synthetic emergency bursts and running rapid keyboard shortcuts.
 
 <p align="center">
