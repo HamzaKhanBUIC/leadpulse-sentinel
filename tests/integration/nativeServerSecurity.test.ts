@@ -144,3 +144,32 @@ describe('Native server simulator route guard', () => {
     expect(await leadCount()).toBe(0);
   });
 });
+
+describe('Native server request hardening', () => {
+  let server: Server;
+  let baseUrl: string;
+
+  beforeAll(async () => {
+    server = createHttpServer();
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  const ingestRaw = (body: string) =>
+    fetch(`${baseUrl}/api/v1/leads/ingest`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+
+  it('treats a JSON null body as empty instead of crashing the process', async () => {
+    expect((await ingestRaw('null')).status).toBe(400);
+    expect((await fetch(`${baseUrl}/api/v1/metrics`)).status).toBe(200);
+  });
+
+  it('rejects bodies over 64 KB with 413', async () => {
+    const huge = JSON.stringify({ customer_phone: '+15550001111', raw_inquiry_text: 'x'.repeat(70 * 1024) });
+    expect((await ingestRaw(huge)).status).toBe(413);
+    expect((await fetch(`${baseUrl}/api/v1/metrics`)).status).toBe(200);
+  });
+});

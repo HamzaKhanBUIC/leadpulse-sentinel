@@ -4,7 +4,7 @@ import { estimateJobValueUsd } from '../core/sentinel/valuationModel.js';
 import { generateAutoRescuePayload } from '../core/rescue/autoRescueDispatcher.js';
 import { LeadEventStore } from '../core/ledger/eventStore.js';
 import { SAMPLE_SCENARIOS, generateRandomSyntheticLead } from '../core/simulator/leadEmitter.js';
-import { escapeHtml, isValidLeadId, checkAdminToken, ADMIN_TOKEN_HEADER, MAX_BURST_COUNT } from './security.js';
+import { escapeHtml, isValidLeadId, checkAdminToken, ADMIN_TOKEN_HEADER, MAX_BURST_COUNT, MAX_BODY_BYTES } from './security.js';
 
 export const serverStore = new LeadEventStore();
 
@@ -64,7 +64,7 @@ for (const sample of SAMPLE_SCENARIOS) {
 }
 
 export function createHttpServer() {
-  return http.createServer(async (req, res) => {
+  const handleRequest = async (req, res) => {
     // Enable CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -85,12 +85,22 @@ export function createHttpServer() {
       res.end(JSON.stringify(data));
     };
 
-    const readBody = () => new Promise((resolve) => {
+    const readBody = () => new Promise((resolve, reject) => {
       let body = '';
-      req.on('data', chunk => { body += chunk; });
+      let tooLarge = false;
+      req.on('data', chunk => {
+        if (tooLarge) return;
+        body += chunk;
+        if (Buffer.byteLength(body) > MAX_BODY_BYTES) {
+          tooLarge = true;
+          reject(Object.assign(new Error('Request body too large'), { statusCode: 413 }));
+        }
+      });
       req.on('end', () => {
+        if (tooLarge) return;
         try {
-          resolve(body ? JSON.parse(body) : {});
+          const parsedBody = body ? JSON.parse(body) : {};
+          resolve(parsedBody && typeof parsedBody === 'object' ? parsedBody : {});
         } catch {
           resolve({});
         }
@@ -376,6 +386,17 @@ export function createHttpServer() {
     // 10. Serve World-Class Standalone Web UI (Dashboard)
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(renderWorldClassHtml());
+  };
+
+  // An error in one request must not crash the whole process (unhandled rejection).
+  return http.createServer((req, res) => {
+    handleRequest(req, res).catch((err) => {
+      const statusCode = err?.statusCode === 413 ? 413 : 500;
+      if (statusCode === 500) console.error('[LeadPulse Sentinel Server] Request failed:', err);
+      if (res.headersSent) return res.end();
+      res.writeHead(statusCode, { 'Content-Type': 'application/json', Connection: 'close' });
+      res.end(JSON.stringify({ success: false, error: statusCode === 413 ? 'Request body too large' : 'Internal server error' }));
+    });
   });
 }
 
