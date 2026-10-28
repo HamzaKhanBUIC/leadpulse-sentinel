@@ -1,218 +1,83 @@
-# LeadPulse Sentinel 🛡️
+# LeadPulse Sentinel
 
-> **Autonomous Inbound Sentinel & Lead Leakage Prevention Engine**  
-> *Engineered for High-Velocity Trade Contractors (HVAC, Plumbing, Electrical, Roofing, Restoration)*
+> A missed-lead triage dashboard for trade contractors: it scores each inbound inquiry for urgency with keyword rules, estimates job value, and creates a self-booking page, so a missed call can still turn into a booked visit.
 
-[![Test Suite](https://img.shields.io/badge/Tests-14%2F14%20Passing-emerald?style=flat-square)](tests/)
-[![Coverage](https://img.shields.io/badge/Coverage-100%25%20Verified-blue?style=flat-square)](tests/)
-[![Architecture](https://img.shields.io/badge/Architecture-Event--Driven-indigo?style=flat-square)](docs/02_developer_guide.md)
-[![Zero-Dependency](https://img.shields.io/badge/Zero--Dependency-Node.js%20Native-purple?style=flat-square)](src/server/)
-[![License](https://img.shields.io/badge/License-MIT-slate?style=flat-square)](LICENSE)
-
----
-
-## 📌 The Problem: The High Cost of Speed-to-Lead Decay
-
-In emergency home services and specialized trade contracting, **78% of customers buy from the first business that responds**. 
-
-Yet, due to active job-site work, driving, and after-hours coverage gaps, the average trade business misses **25% to 62% of inbound calls and web inquiries**. When an inquiry goes unanswered for longer than **5 minutes**:
-- Lead qualification odds drop by **21x**.
-- Over **80% of homeowners** immediately call the next competitor on Google.
-- A single missed AC failure or ruptured water pipe costs contractors **$1,600 to $8,500+ in lost revenue**.
-
-**LeadPulse Sentinel** eliminates this leakage entirely by acting as an autonomous, sub-second inbound sentinel. It intercepts missed calls, web forms, and after-hours inquiries, classifies urgency and financial value in $<10\text{ms}$, and instantly dispatches an interactive SMS rescue link that allows homeowners to hold an emergency arrival window before they dial a competitor.
-
----
-
-## 🖥️ Live Mission Control Previews
-
-### 1. Enterprise Mission Control & Live Triage Radar
-Real-time telemetry dashboard featuring live SLA decay gauges, urgency scores, dynamic SVG sparkline charts, and one-click triage dispatching.
+**Status:** Prototype. SMS sending is simulated: no SMS or telephony provider is connected (see [Limitations](#limitations)). 14 tests in the documented runner (`node --test tests/standalone_runner.js`).
+**Demo:** none hosted. Run it locally in one command (below); screenshots follow.
 
 ![Mission Control Dashboard](docs/assets/screenshots/mission_control_dashboard.png)
 
----
-
-### 2. Tactical Kanban Pipeline Board
-High-density visual dispatch workflow categorizing inbounds across 4 real-time SLA stages: *Inbound Triage*, *Auto-Rescue Sent*, *Slot Reserved*, and *Rescued & Dispatched*.
-
-![Tactical Kanban Pipeline Board](docs/assets/screenshots/kanban_pipeline_board.png)
-
----
-
-### 3. Slide-Over Lead Inspector & Live 2-Way SMS Stream
-Detailed customer dossier with dollar valuation breakdown, interactive 2-way dispatcher SMS thread with macro chips, fleet truck assignment roster, and immutable audit logging.
-
-![Lead Inspector Drawer](docs/assets/screenshots/lead_inspector_drawer.png)
-
----
-
-### 4. Customer-Facing Mobile Self-Booking Experience (`/book/:id`)
-Apple-grade, trustworthy mobile reservation portal sent via SMS, allowing homeowners to reserve an emergency arrival window in under 30 seconds.
-
 <p align="center">
-  <img src="docs/assets/screenshots/mobile_booking_portal.png" width="380" alt="Mobile Booking Portal" />
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="docs/assets/screenshots/confirmed_arrival_pass.png" width="380" alt="Confirmed Arrival Pass" />
+  <img src="docs/assets/screenshots/lead_inspector_drawer.png" width="48%" alt="Lead inspector drawer" />
+  &nbsp;
+  <img src="docs/assets/screenshots/mobile_booking_portal.png" width="30%" alt="Mobile booking page" />
 </p>
 
----
+## Quickstart
 
-### 5. Ingress Chaos Simulator & Command Palette (`⌘K`)
-Developer and dispatcher test bench for injecting high-concurrency synthetic emergency bursts and running rapid keyboard shortcuts.
-
-<p align="center">
-  <img src="docs/assets/screenshots/ingress_chaos_simulator.png" width="48%" alt="Ingress Chaos Simulator" />
-  &nbsp;&nbsp;
-  <img src="docs/assets/screenshots/command_palette.png" width="48%" alt="Command Palette" />
-</p>
-
----
-
-## ✨ Key Features & Capabilities
-
-- ⚡ **Sub-Second Automated Rescue (< 2s)**: Dispatches personalized SMS messages with unique single-use booking tokens immediately upon missed call detection.
-- 🎯 **Deterministic NLP Urgency Classifier ($L_{\text{score}} \in [0, 100]$)**: Identifies life-safety risks (burst pipes, sparking electrical panels, freezing furnaces) and dynamically maps SLA response windows ($60\text{s}$ to $300\text{s}$).
-- 💰 **Dynamic Job Valuation Model**: Estimates pipeline revenue values ($120 to $12,000) based on trade vertical and emergency severity.
-- 📊 **Real-Time Financial Rescue Ledger**: Continuously computes **Pipeline Rescued ($)**, **Active at Risk ($)**, and **Recovery Rate (%)** metrics with live SVG sparkline trendlines.
-- ⏱️ **Circular SVG SLA Decay Meters**: Visual countdown dials that transition from Emerald $\rightarrow$ Amber $\rightarrow$ Pulsing Crimson as SLAs decay.
-- 📱 **Mobile Customer Scheduling Portal**: Frictionless arrival window reservations with gate code capture and digital arrival passes.
-- 🎛️ **Ingress Chaos Simulator**: Built-in testing suite for firing concurrent webhook bursts and simulating emergency disaster scenarios.
-- ⌨️ **Raycast-Style Command Palette (`⌘K` / `Ctrl+K`)**: Rapid keyboard navigation and instant triage actions.
-- 🔊 **Web Audio Tactile Acoustic Feedback**: Synthesized audio chimes for operational feedback during high-stakes triage.
-- 🚀 **Zero-Dependency Native Architecture**: Runs standalone on Node.js 20+ with 100% standard libraries—zero external runtime dependencies required.
-
----
-
-## 🏗️ System Architecture
-
-```
-[ Inbound Multi-Channel Ingress ]
- (Missed Calls, Web Forms, After-Hours, VoIP Webhooks)
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│                 LeadPulse Sentinel Core                     │
-│                                                             │
-│   ┌────────────────────────┐    ┌───────────────────────┐   │
-│   │ Urgency Classifier     │    │ Financial Valuation   │   │
-│   │ (NLP Keyword Matcher)  │    │ Model ($120 - $12k)   │   │
-│   └───────────┬────────────┘    └───────────┬───────────┘   │
-│               │                             │               │
-│               ▼                             ▼               │
-│   ┌─────────────────────────────────────────────────────┐   │
-│   │             In-Memory Event Ledger Store            │   │
-│   │     (Immutable Audit Events & KPI Aggregations)     │   │
-│   └─────────────────────────┬───────────────────────────┘   │
-│                             │                               │
-│                             ▼                               │
-│   ┌─────────────────────────────────────────────────────┐   │
-│   │           Auto-Rescue Dispatcher Engine             │   │
-│   │         (Sub-2s SMS Payload & Token URL)            │   │
-│   └─────────────────────────────────────────────────────┘   │
-└─────────────────────────────┬───────────────────────────────┘
-                              │
-             ┌────────────────┴────────────────┐
-             ▼                                 ▼
-┌─────────────────────────┐       ┌─────────────────────────┐
-│ Dispatcher Command UI   │       │ Homeowner Mobile Portal │
-│ (Live Triage Radar,     │       │ (/book/:id Interactive  │
-│  SLA Gauges, KPIs, ⌘K)  │       │  Emergency Arrival Pass)│
-└─────────────────────────┘       └─────────────────────────┘
-```
-
----
-
-## 🚀 Quickstart
-
-### Prerequisites
-- [Node.js 20.0+](https://nodejs.org/)
-
-### Installation & Launch
+Requires Node.js 20 or newer. The server path below has no install step: `src/server/nativeServer.js` imports only Node built-ins.
 
 ```bash
-# 1. Clone the repository
 git clone https://github.com/HamzaKhanBUIC/leadpulse-sentinel.git
 cd leadpulse-sentinel
-
-# 2. Launch the Sentinel Server (Serves API & Web UI)
-node src/server/index.js
+node src/server/index.js          # dashboard at http://localhost:3001
+node --test tests/standalone_runner.js   # 14 tests
 ```
 
-Open your browser and navigate to:
-- **Mission Control Dashboard**: `http://localhost:3001`
-- **Customer Self-Booking Preview**: `http://localhost:3001/book/lead_uuudvy8`
-
----
-
-## 🧪 Automated Test Suite
-
-LeadPulse includes a zero-dependency, multi-tier automated test suite executed via the native Node.js test runner:
+Try it: post a lead, then open the dashboard.
 
 ```bash
-node --test tests/standalone_runner.js
+curl -X POST http://localhost:3001/api/v1/leads/ingest \
+  -H "Content-Type: application/json" \
+  -d '{"channel":"MISSED_CALL","customer_phone":"+15550100","raw_inquiry_text":"burst pipe flooding basement"}'
 ```
 
-### Test Suite Coverage
+That request returns a `CRITICAL` lead with an `l_score` of 95 and a 60-second SLA. To see the customer page, open the lead in the dashboard and use its booking link (`/book/<lead id>`). Lead IDs are random, so there is no fixed preview URL.
 
-```
-▶ 1. Urgency Classifier & NLP Triage Engine (4 tests) - PASSED
-▶ 2. Financial Valuation Model (4 tests) - PASSED
-▶ 3. AutoRescue Dispatcher Engine (1 test) - PASSED
-▶ 4. End-to-End Leakage Recovery Scenario (1 test) - PASSED
-▶ 5. Full Native API Server & REST Endpoints (1 test) - PASSED
-▶ 6. Adversarial Chaos & High-Concurrency Edge Cases (3 tests) - PASSED
+What it does:
 
-✔ Total Tests: 14 | Passed: 14 | Failed: 0 | Duration: < 300ms
-```
+- **Urgency scoring.** Keyword lists in `src/core/sentinel/urgencyClassifier.ts` give a 0-100 `l_score` and an SLA of 60 s, 3 min, 15 min or 60 min. This is rule matching, not a language model.
+- **Job value estimate.** A lookup by trade and severity, $120 to $12,000 (`valuationModel.ts`).
+- **Metrics.** `GET /api/v1/metrics` returns pipeline rescued, at risk and recovery rate from the in-memory store.
+- **Customer booking page** at `/book/:id`, and a dispatcher dashboard with a command palette (Ctrl+K or Cmd+K).
+- **Simulator.** `POST /api/v1/simulate/burst` injects fake leads (up to 50 per call); `POST /api/v1/simulate/clear` wipes the store. Both need the admin token.
 
----
-
-## 📡 REST API Reference
+### API
 
 | Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/v1/leads` | Retrieve all monitored inbound leads with SLA decay status |
-| `POST` | `/api/v1/leads/ingest` | Ingest webhook from VoIP / Form (`channel`, `customer_phone`, `raw_inquiry_text`) |
-| `GET` | `/api/v1/leads/:id` | Fetch detailed customer dossier and audit trail |
-| `POST` | `/api/v1/leads/:id/action` | Dispatcher action (`MARK_RESCUED`, `MARK_LOST`) |
-| `POST` | `/api/v1/leads/:id/book` | Customer self-service slot reservation (`slot_id`, `notes`) |
-| `GET` | `/api/v1/metrics` | Retrieve real-time financial ledger KPIs ($ rescued, $ at risk, recovery %) |
-| `POST` | `/api/v1/simulate/burst` | Fire synthetic concurrent lead burst (`count: 3`) |
-| `POST` | `/api/v1/simulate/clear` | Purge and reset database store |
+| :-- | :-- | :-- |
+| `GET` | `/api/v1/leads` | All leads with SLA status |
+| `POST` | `/api/v1/leads/ingest` | New lead (`channel`, `customer_phone`, `raw_inquiry_text`) |
+| `GET` | `/api/v1/leads/:id` | One lead with its audit trail |
+| `POST` | `/api/v1/leads/:id/action` | `MARK_RESCUED` or `MARK_LOST` |
+| `POST` | `/api/v1/leads/:id/book` | Customer slot booking (`slot_id`, `notes`) |
+| `POST` | `/api/v1/leads/:id/sms` | Dispatcher message (stored in the lead, not sent) |
+| `POST` | `/api/v1/leads/:id/assign` | Assign a truck |
+| `GET` | `/api/v1/metrics` | Ledger numbers |
+| `POST` | `/api/v1/simulate/burst`, `/api/v1/simulate/clear` | Simulator, admin token required |
 
----
+## Configuration
 
-## 📁 Repository Structure
+| Variable | Default | Description |
+| :-- | :-- | :-- |
+| `PORT` | `3001` | HTTP port (`src/server/index.js`). |
+| `LEADPULSE_ADMIN_TOKEN` | unset | At least 16 characters. Required for the two simulator routes, which are refused (403) while it is unset. Send it as the `X-Admin-Token` header; the dashboard asks for it in a prompt. |
 
-```
-leadpulse-sentinel/
-├── docs/
-│   ├── assets/screenshots/           # High-resolution UI captures
-│   ├── 01_user_guide.md              # Dispatcher operational guide
-│   ├── 02_developer_guide.md         # Engineering & architecture handbook
-│   ├── 03_deployment_runbook.md      # Docker & production setup
-│   └── 04_known_limitations.md       # Scope boundaries & roadmap
-├── src/
-│   ├── types/index.ts                # TypeScript canonical schemas
-│   ├── core/
-│   │   ├── sentinel/urgencyClassifier.js # NLP urgency & SLA calculation
-│   │   ├── sentinel/valuationModel.js    # Trade job valuation algorithms
-│   │   ├── rescue/autoRescueDispatcher.js# Sub-2s SMS generator
-│   │   ├── ledger/eventStore.js          # In-memory event ledger & KPI engine
-│   │   └── simulator/leadEmitter.js      # Synthetic scenario generator
-│   ├── adapters/
-│   │   └── ingress/leadNormalizer.js     # Webhook ingress parser & validator
-│   └── server/
-│       ├── nativeServer.js               # Standalone HTTP engine & UI server
-│       └── index.js                      # Application entrypoint
-├── tests/
-│   └── standalone_runner.js          # Native automated test runner
-└── README.md                         # Project documentation
-```
+The booking link in each generated message always starts with `http://localhost:3001`, whatever `PORT` is (`src/core/rescue/autoRescueDispatcher.js`). There is no setting for it yet.
 
----
+## Limitations
 
-## 📄 License
+- **SMS is simulated.** No message is sent. The rescue payload is built in memory and its `delivery_status` is hard-coded to `DELIVERED` (`autoRescueDispatcher.js`). The dispatcher "SMS" thread only stores text, and the first "customer" reply in it is canned demo text.
+- **No telephony.** "Missed call" means a JSON `POST` to `/api/v1/leads/ingest`. There are no VoIP webhooks and no signature check.
+- **Booking links are not tokens.** The link uses the lead ID, generated with `Math.random`. It is not single-use and it does not expire.
+- **In-memory only.** Restarting the server loses all leads.
+- **No login.** Dispatcher routes (`/action`, `/sms`, `/assign`) and lead reads have no authentication; only the simulator routes need the admin token. Do not expose the server to a network.
+- **Keyword classifier**, no language model, no benchmark. The per-request speed is not measured.
+- **Two code paths.** The documented server is `src/server/nativeServer.js` with `.js` files. An Express + React + Vite path (`.ts`, `src/client/`) exists alongside it and has diverged. `npm test` runs Vitest over both and had 6 failing tests on this branch, so use the `node --test` command above. `npm run build` fails type-checking in `src/server/app.ts` (3 errors).
+- The dashboard loads Tailwind from a CDN with no integrity check, so it needs internet access.
+- Market statistics from earlier versions of this README are not repeated here; they had no linked sources.
 
-Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
+## License
+
+MIT. See [LICENSE](LICENSE).
+
