@@ -4,6 +4,7 @@ import { estimateJobValueUsd } from '../core/sentinel/valuationModel.js';
 import { generateAutoRescuePayload } from '../core/rescue/autoRescueDispatcher.js';
 import { LeadEventStore } from '../core/ledger/eventStore.js';
 import { SAMPLE_SCENARIOS, generateRandomSyntheticLead } from '../core/simulator/leadEmitter.js';
+import { escapeHtml, isValidLeadId, checkAdminToken, ADMIN_TOKEN_HEADER, MAX_BURST_COUNT, MAX_BODY_BYTES } from './security.js';
 
 export const serverStore = new LeadEventStore();
 
@@ -63,7 +64,7 @@ for (const sample of SAMPLE_SCENARIOS) {
 }
 
 export function createHttpServer() {
-  return http.createServer(async (req, res) => {
+  const handleRequest = async (req, res) => {
     // Enable CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -84,12 +85,22 @@ export function createHttpServer() {
       res.end(JSON.stringify(data));
     };
 
-    const readBody = () => new Promise((resolve) => {
+    const readBody = () => new Promise((resolve, reject) => {
       let body = '';
-      req.on('data', chunk => { body += chunk; });
+      let tooLarge = false;
+      req.on('data', chunk => {
+        if (tooLarge) return;
+        body += chunk;
+        if (Buffer.byteLength(body) > MAX_BODY_BYTES) {
+          tooLarge = true;
+          reject(Object.assign(new Error('Request body too large'), { statusCode: 413 }));
+        }
+      });
       req.on('end', () => {
+        if (tooLarge) return;
         try {
-          resolve(body ? JSON.parse(body) : {});
+          const parsedBody = body ? JSON.parse(body) : {};
+          resolve(parsedBody && typeof parsedBody === 'object' ? parsedBody : {});
         } catch {
           resolve({});
         }
@@ -293,10 +304,16 @@ export function createHttpServer() {
       return sendJson(200, { success: true, metrics });
     }
 
+    // Simulator routes create or wipe data: require LEADPULSE_ADMIN_TOKEN (fails closed when unset)
+    if (pathname.startsWith('/api/v1/simulate/')) {
+      const auth = checkAdminToken(req.headers[ADMIN_TOKEN_HEADER]);
+      if (!auth.ok) return sendJson(auth.status, { success: false, error: auth.error });
+    }
+
     // 7. POST /api/v1/simulate/burst
     if (req.method === 'POST' && pathname === '/api/v1/simulate/burst') {
       const body = await readBody();
-      const count = Number(body.count) || 3;
+      const count = Math.min(Number(body.count) || 3, MAX_BURST_COUNT);
       const generated = [];
       for (let i = 0; i < count; i++) {
         const syn = generateRandomSyntheticLead();
@@ -357,6 +374,10 @@ export function createHttpServer() {
     // 9. Serve Customer Self-Booking Portal (/book/:id)
     if (req.method === 'GET' && pathname?.startsWith('/book/')) {
       const id = pathname.replace('/book/', '');
+      if (!isValidLeadId(id)) {
+        res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+        return res.end('Booking link not found');
+      }
       const lead = serverStore.getLead(id);
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       return res.end(renderCustomerBookingHtml(lead, id));
@@ -365,13 +386,24 @@ export function createHttpServer() {
     // 10. Serve World-Class Standalone Web UI (Dashboard)
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(renderWorldClassHtml());
+  };
+
+  // An error in one request must not crash the whole process (unhandled rejection).
+  return http.createServer((req, res) => {
+    handleRequest(req, res).catch((err) => {
+      const statusCode = err?.statusCode === 413 ? 413 : 500;
+      if (statusCode === 500) console.error('[LeadPulse Sentinel Server] Request failed:', err);
+      if (res.headersSent) return res.end();
+      res.writeHead(statusCode, { 'Content-Type': 'application/json', Connection: 'close' });
+      res.end(JSON.stringify({ success: false, error: statusCode === 413 ? 'Request body too large' : 'Internal server error' }));
+    });
   });
 }
 
 function renderCustomerBookingHtml(lead, id) {
-  const name = lead?.customer_name ? lead.customer_name.split(' ')[0] : 'there';
-  const trade = lead?.trade || 'Emergency Home';
-  const issue = lead?.raw_inquiry_text || 'emergency service situation';
+  const name = escapeHtml(lead?.customer_name ? String(lead.customer_name).split(' ')[0] : 'there');
+  const trade = escapeHtml(lead?.trade || 'Emergency Home');
+  const issue = escapeHtml(lead?.raw_inquiry_text || 'emergency service situation');
   const isAlreadyBooked = lead?.status === 'APPOINTMENT_BOOKED';
 
   return `<!DOCTYPE html>
@@ -420,9 +452,9 @@ function renderCustomerBookingHtml(lead, id) {
             <p class="text-xs text-slate-300 mt-1">Technician on standby. We will text you 15 minutes before arrival.</p>
           </div>
           <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 text-left space-y-2 font-mono text-xs">
-            <div class="flex justify-between"><span class="text-slate-400">Customer:</span><span class="text-white font-bold">${lead?.customer_name}</span></div>
-            <div class="flex justify-between"><span class="text-slate-400">Phone:</span><span class="text-white">${lead?.customer_phone}</span></div>
-            <div class="flex justify-between"><span class="text-slate-400">Window:</span><span class="text-emerald-400 font-bold">${lead?.booked_slot?.label || 'Immediate Priority'}</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Customer:</span><span class="text-white font-bold">${escapeHtml(lead?.customer_name)}</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Phone:</span><span class="text-white">${escapeHtml(lead?.customer_phone)}</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Window:</span><span class="text-emerald-400 font-bold">${escapeHtml(lead?.booked_slot?.label || 'Immediate Priority')}</span></div>
           </div>
         </div>
       ` : `
@@ -479,7 +511,7 @@ function renderCustomerBookingHtml(lead, id) {
           </div>
 
           <!-- Submit Action -->
-          <button onclick="confirmBooking('${id}')" id="btn-submit-booking" class="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-xl shadow-blue-600/30 transition-all flex items-center justify-center gap-2 active:scale-98">
+          <button onclick="confirmBooking(this.dataset.leadId)" data-lead-id="${escapeHtml(id)}" id="btn-submit-booking" class="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-xl shadow-blue-600/30 transition-all flex items-center justify-center gap-2 active:scale-98">
             <span>Lock In Priority Arrival Window →</span>
           </button>
         </div>
@@ -1031,6 +1063,8 @@ function renderWorldClassHtml() {
 
   <!-- Client JavaScript Engine -->
   <script>
+    ${escapeHtml.toString()}
+
     let allLeads = [];
     let activeFilter = { channel: 'ALL', trade: 'ALL', urgency: 'ALL', search: '' };
     let currentView = 'table';
@@ -1114,8 +1148,8 @@ function renderWorldClassHtml() {
       toast.innerHTML = \`
         <span class="text-base">\${icon}</span>
         <div class="flex-1">
-          <div class="font-bold text-white">\${title}</div>
-          <div class="text-[11px] text-slate-300 mt-0.5">\${message}</div>
+          <div class="font-bold text-white">\${escapeHtml(title)}</div>
+          <div class="text-[11px] text-slate-300 mt-0.5">\${escapeHtml(message)}</div>
         </div>
       \`;
       container.appendChild(toast);
@@ -1253,14 +1287,14 @@ function renderWorldClassHtml() {
         return \`
           <div onclick="openLeadDetail('\${lead.id}')" class="p-3 rounded-xl bg-slate-900/90 border border-white/[0.08] hover:border-blue-500/50 cursor-pointer space-y-2.5 transition-all shadow-md group">
             <div class="flex items-center justify-between">
-              <span class="text-[10px] font-mono px-1.5 py-0.2 rounded border \${urgencyTag}">\${lead.l_score} \${lead.urgency_tier}</span>
+              <span class="text-[10px] font-mono px-1.5 py-0.2 rounded border \${urgencyTag}">\${escapeHtml(lead.l_score)} \${escapeHtml(lead.urgency_tier)}</span>
               <span class="font-mono text-xs font-bold text-white">$\${lead.estimated_job_value_usd?.toLocaleString() || 500}</span>
             </div>
             <div>
-              <div class="font-bold text-white text-xs group-hover:text-blue-400 transition-colors">\${lead.customer_name}</div>
-              <div class="text-[10px] text-slate-400 font-mono">\${lead.trade} • \${lead.customer_phone}</div>
+              <div class="font-bold text-white text-xs group-hover:text-blue-400 transition-colors">\${escapeHtml(lead.customer_name)}</div>
+              <div class="text-[10px] text-slate-400 font-mono">\${escapeHtml(lead.trade)} • \${escapeHtml(lead.customer_phone)}</div>
             </div>
-            <p class="text-[11px] text-slate-300 line-clamp-2 leading-relaxed">\${lead.raw_inquiry_text}</p>
+            <p class="text-[11px] text-slate-300 line-clamp-2 leading-relaxed">\${escapeHtml(lead.raw_inquiry_text)}</p>
             <div class="flex items-center justify-between pt-1 border-t border-white/[0.04] text-[10px] font-mono">
               <span class="\${secondsLeft <= 60 && !isResolved ? 'text-rose-400 font-bold animate-pulse' : 'text-slate-400'}">
                 \${isResolved ? (lead.status === 'LOST_BREACHED' ? 'BREACHED' : 'RESOLVED') : \`⏱️ \${Math.floor(secondsLeft/60)}:\${secondsLeft%60 < 10 ? '0' : ''}\${secondsLeft%60}\`}
@@ -1302,7 +1336,7 @@ function renderWorldClassHtml() {
             <circle cx="\${pt.x}" cy="\${pt.y}" r="18" fill="\${isCritical ? 'rgba(244,63,94,0.15)' : 'rgba(59,130,246,0.15)'}" class="animate-ping" />
             <circle cx="\${pt.x}" cy="\${pt.y}" r="8" fill="\${isCritical ? '#FF2D55' : '#3B82F6'}" stroke="#FFFFFF" stroke-width="2" />
             <rect x="\${pt.x - 60}" y="\${pt.y - 34}" width="120" height="22" rx="6" fill="#0F172A" stroke="rgba(255,255,255,0.15)" />
-            <text x="\${pt.x}" y="\${pt.y - 19}" fill="#FFFFFF" font-family="Plus Jakarta Sans" font-size="10" font-weight="700" text-anchor="middle">\${l.customer_name.split(' ')[0]} • $\${l.estimated_job_value_usd || 500}</text>
+            <text x="\${pt.x}" y="\${pt.y - 19}" fill="#FFFFFF" font-family="Plus Jakarta Sans" font-size="10" font-weight="700" text-anchor="middle">\${escapeHtml(String(l.customer_name).split(' ')[0])} • $\${l.estimated_job_value_usd || 500}</text>
           </g>
         \`;
       }).join('');
@@ -1401,15 +1435,15 @@ function renderWorldClassHtml() {
               </div>
             </td>
             <td class="py-3 px-4">
-              <div class="font-bold text-white text-xs hover:text-blue-400 transition-colors">\${lead.customer_name}</div>
-              <div class="text-[10px] text-slate-400 font-mono">\${lead.trade} • \${lead.customer_phone}</div>
+              <div class="font-bold text-white text-xs hover:text-blue-400 transition-colors">\${escapeHtml(lead.customer_name)}</div>
+              <div class="text-[10px] text-slate-400 font-mono">\${escapeHtml(lead.trade)} • \${escapeHtml(lead.customer_phone)}</div>
             </td>
             <td class="py-3 px-4 text-slate-300 text-xs line-clamp-1 max-w-sm">
-              \${lead.raw_inquiry_text}
+              \${escapeHtml(lead.raw_inquiry_text)}
             </td>
             <td class="py-3 px-4">
               <span class="px-2 py-0.5 rounded border text-[10px] font-mono \${urgencyBadge}">
-                \${lead.l_score} \${lead.urgency_tier}
+                \${escapeHtml(lead.l_score)} \${escapeHtml(lead.urgency_tier)}
               </span>
             </td>
             <td class="py-3 px-4 font-mono font-bold text-white text-xs">
@@ -1426,7 +1460,7 @@ function renderWorldClassHtml() {
             </td>
             <td class="py-3 px-4">
               <span class="px-2 py-0.5 rounded text-[10px] font-mono font-medium \${lead.status === 'APPOINTMENT_BOOKED' || lead.status === 'RESCUED' ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/60' : lead.status === 'LOST_BREACHED' ? 'bg-rose-950/80 text-rose-300 border border-rose-700/60' : 'bg-blue-950/80 text-blue-300 border border-blue-700/60'}">
-                \${lead.status}
+                \${escapeHtml(lead.status)}
               </span>
             </td>
             <td class="py-3 px-4 text-right" onclick="event.stopPropagation()">
@@ -1497,10 +1531,10 @@ function renderWorldClassHtml() {
             </div>
             <div>
               <div class="flex items-center gap-2">
-                <h3 class="text-base font-bold text-white">\${selectedLead.customer_name}</h3>
-                <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-600">\${selectedLead.l_score} \${selectedLead.urgency_tier}</span>
+                <h3 class="text-base font-bold text-white">\${escapeHtml(selectedLead.customer_name)}</h3>
+                <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-600">\${escapeHtml(selectedLead.l_score)} \${escapeHtml(selectedLead.urgency_tier)}</span>
               </div>
-              <p class="text-xs text-slate-400 font-mono">\${selectedLead.trade} • \${selectedLead.customer_phone}</p>
+              <p class="text-xs text-slate-400 font-mono">\${escapeHtml(selectedLead.trade)} • \${escapeHtml(selectedLead.customer_phone)}</p>
             </div>
           </div>
           <button onclick="closeDrawer()" class="text-slate-400 hover:text-white p-1 rounded-lg">✕</button>
@@ -1523,7 +1557,7 @@ function renderWorldClassHtml() {
           <!-- Problem Ingress Text -->
           <div class="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800">
             <span class="text-[10px] font-mono uppercase text-slate-500">Raw Inbound Inquiry</span>
-            <p class="text-xs text-slate-200 mt-1 leading-relaxed">\${selectedLead.raw_inquiry_text}</p>
+            <p class="text-xs text-slate-200 mt-1 leading-relaxed">\${escapeHtml(selectedLead.raw_inquiry_text)}</p>
           </div>
 
           <!-- Live SMS Auto-Rescue Stream & Interactive Composer -->
@@ -1542,14 +1576,14 @@ function renderWorldClassHtml() {
               ]).map(msg => msg.sender === 'CUSTOMER' ? \`
                 <div class="flex flex-col items-start">
                   <div class="max-w-[85%] p-3 rounded-2xl rounded-tl-sm bg-slate-800 text-slate-200 text-xs border border-slate-700">
-                    <p>\${msg.text}</p>
+                    <p>\${escapeHtml(msg.text)}</p>
                   </div>
-                  <span class="text-[10px] font-mono text-slate-500 mt-1">\${selectedLead.customer_name} • \${new Date(msg.timestamp).toLocaleTimeString()}</span>
+                  <span class="text-[10px] font-mono text-slate-500 mt-1">\${escapeHtml(selectedLead.customer_name)} • \${new Date(msg.timestamp).toLocaleTimeString()}</span>
                 </div>
               \` : \`
                 <div class="flex flex-col items-end">
                   <div class="max-w-[85%] p-3 rounded-2xl rounded-tr-sm bg-blue-600 text-white text-xs shadow-md">
-                    <p>\${msg.text}</p>
+                    <p>\${escapeHtml(msg.text)}</p>
                   </div>
                   <span class="text-[10px] font-mono text-slate-500 mt-1">\${msg.sender === 'SENTINEL_AUTO' ? 'Sentinel Auto-Rescue' : 'Dispatcher'} • \${new Date(msg.timestamp).toLocaleTimeString()}</span>
                 </div>
@@ -1581,7 +1615,7 @@ function renderWorldClassHtml() {
             <div class="p-3 rounded-xl bg-blue-950/30 border border-blue-800/40 flex items-center justify-between mt-2">
               <div>
                 <span class="text-xs font-semibold text-blue-300">Customer Self-Booking Portal</span>
-                <p class="text-[10px] text-slate-400 font-mono">Token: \${bookingUrl}</p>
+                <p class="text-[10px] text-slate-400 font-mono">Token: \${escapeHtml(bookingUrl)}</p>
               </div>
               <a href="/book/\${selectedLead.id}" target="_blank" class="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors">
                 Open Portal ↗
@@ -1607,8 +1641,8 @@ function renderWorldClassHtml() {
               </div>
               \${selectedLead.assigned_technician ? \`
                 <div class="p-2 rounded-lg bg-emerald-950/60 border border-emerald-700/60 font-mono text-[11px] text-emerald-300 flex items-center justify-between">
-                  <span>Assigned: \${selectedLead.assigned_technician.name} (\${selectedLead.assigned_technician.truck})</span>
-                  <span class="font-bold">ETA: ~\${selectedLead.assigned_technician.eta_minutes}m</span>
+                  <span>Assigned: \${escapeHtml(selectedLead.assigned_technician.name)} (\${escapeHtml(selectedLead.assigned_technician.truck)})</span>
+                  <span class="font-bold">ETA: ~\${escapeHtml(selectedLead.assigned_technician.eta_minutes)}m</span>
                 </div>
               \` : ''}
             </div>
@@ -1620,7 +1654,7 @@ function renderWorldClassHtml() {
             <div class="space-y-1.5 font-mono text-[11px]">
               \${(selectedLead.audit_trail || []).map(evt => \`
                 <div class="p-2 rounded bg-slate-900/60 border border-slate-800/60 flex items-center justify-between text-slate-300">
-                  <span>\${evt.action}</span>
+                  <span>\${escapeHtml(evt.action)}</span>
                   <span class="text-slate-500 text-[10px]">\${new Date(evt.timestamp).toLocaleTimeString()}</span>
                 </div>
               \`).join('')}
@@ -1739,20 +1773,40 @@ function renderWorldClassHtml() {
       fetchState();
     }
 
+    // Simulator routes need the server's LEADPULSE_ADMIN_TOKEN; ask once per browser tab.
+    async function simulatorFetch(path, payload) {
+      const send = (token) => fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token || '' },
+        body: JSON.stringify(payload || {})
+      });
+      let token = sessionStorage.getItem('leadpulse_admin_token');
+      let res = await send(token);
+      if (res.status === 401) {
+        token = window.prompt('Admin token (LEADPULSE_ADMIN_TOKEN) for simulator actions:');
+        if (token) {
+          res = await send(token);
+          if (res.ok) sessionStorage.setItem('leadpulse_admin_token', token);
+        }
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showToast('Simulator Locked', data.error || 'Admin token required', 'alert');
+      }
+      return res;
+    }
+
     async function triggerQuickBurst(count = 3) {
+      const res = await simulatorFetch('/api/v1/simulate/burst', { count });
+      if (!res.ok) return;
       playSound('burst');
       showToast('Ingress Burst Active', \`+\${count} synthetic leads ingested into triage queue\`, 'info');
-
-      await fetch('/api/v1/simulate/burst', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ count })
-      });
       fetchState();
     }
 
     async function clearDatabase() {
-      await fetch('/api/v1/simulate/clear', { method: 'POST' });
+      const res = await simulatorFetch('/api/v1/simulate/clear');
+      if (!res.ok) return;
       showToast('State Reset', 'Database cleared and initialized to baseline state', 'info');
       closeSimulatorModal();
       fetchState();
