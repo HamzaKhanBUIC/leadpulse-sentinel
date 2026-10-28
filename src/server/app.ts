@@ -1,9 +1,20 @@
-import express, { Request, Response } from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import { normalizeAndEnrichLead, RawInboundSchema } from '../adapters/ingress/leadNormalizer.js';
 import { globalStore } from '../core/ledger/eventStore.js';
 import { SAMPLE_SCENARIOS, generateRandomSyntheticLead } from '../core/simulator/leadEmitter.js';
 import { LeadStatus } from '../types/index.js';
+import { checkAdminToken, ADMIN_TOKEN_HEADER, MAX_BURST_COUNT } from './security.js';
+
+// Simulator routes create or wipe data: require LEADPULSE_ADMIN_TOKEN (fails closed when unset)
+function requireAdminToken(req: Request, res: Response, next: NextFunction) {
+  const auth = checkAdminToken(req.headers[ADMIN_TOKEN_HEADER]);
+  if (!auth.ok) {
+    res.status(auth.status).json({ success: false, error: auth.error });
+    return;
+  }
+  next();
+}
 
 export function createApp() {
   const app = express();
@@ -103,8 +114,8 @@ export function createApp() {
   });
 
   // 7. Simulation Ingestion Burst
-  app.post('/api/v1/simulate/burst', (req: Request, res: Response) => {
-    const count = Number(req.body.count) || 3;
+  app.post('/api/v1/simulate/burst', requireAdminToken, (req: Request, res: Response) => {
+    const count = Math.min(Number(req.body.count) || 3, MAX_BURST_COUNT);
     const generated = [];
     for (let i = 0; i < count; i++) {
       const syn = generateRandomSyntheticLead();
@@ -116,7 +127,7 @@ export function createApp() {
   });
 
   // 8. Simulation Reset / Clear
-  app.post('/api/v1/simulate/clear', (_req: Request, res: Response) => {
+  app.post('/api/v1/simulate/clear', requireAdminToken, (_req: Request, res: Response) => {
     globalStore.clear();
     for (const sample of SAMPLE_SCENARIOS) {
       const lead = normalizeAndEnrichLead(sample);

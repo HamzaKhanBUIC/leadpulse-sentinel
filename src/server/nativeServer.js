@@ -4,7 +4,7 @@ import { estimateJobValueUsd } from '../core/sentinel/valuationModel.js';
 import { generateAutoRescuePayload } from '../core/rescue/autoRescueDispatcher.js';
 import { LeadEventStore } from '../core/ledger/eventStore.js';
 import { SAMPLE_SCENARIOS, generateRandomSyntheticLead } from '../core/simulator/leadEmitter.js';
-import { escapeHtml, isValidLeadId } from './security.js';
+import { escapeHtml, isValidLeadId, checkAdminToken, ADMIN_TOKEN_HEADER, MAX_BURST_COUNT } from './security.js';
 
 export const serverStore = new LeadEventStore();
 
@@ -294,10 +294,16 @@ export function createHttpServer() {
       return sendJson(200, { success: true, metrics });
     }
 
+    // Simulator routes create or wipe data: require LEADPULSE_ADMIN_TOKEN (fails closed when unset)
+    if (pathname.startsWith('/api/v1/simulate/')) {
+      const auth = checkAdminToken(req.headers[ADMIN_TOKEN_HEADER]);
+      if (!auth.ok) return sendJson(auth.status, { success: false, error: auth.error });
+    }
+
     // 7. POST /api/v1/simulate/burst
     if (req.method === 'POST' && pathname === '/api/v1/simulate/burst') {
       const body = await readBody();
-      const count = Number(body.count) || 3;
+      const count = Math.min(Number(body.count) || 3, MAX_BURST_COUNT);
       const generated = [];
       for (let i = 0; i < count; i++) {
         const syn = generateRandomSyntheticLead();
@@ -1746,20 +1752,40 @@ function renderWorldClassHtml() {
       fetchState();
     }
 
+    // Simulator routes need the server's LEADPULSE_ADMIN_TOKEN; ask once per browser tab.
+    async function simulatorFetch(path, payload) {
+      const send = (token) => fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token || '' },
+        body: JSON.stringify(payload || {})
+      });
+      let token = sessionStorage.getItem('leadpulse_admin_token');
+      let res = await send(token);
+      if (res.status === 401) {
+        token = window.prompt('Admin token (LEADPULSE_ADMIN_TOKEN) for simulator actions:');
+        if (token) {
+          res = await send(token);
+          if (res.ok) sessionStorage.setItem('leadpulse_admin_token', token);
+        }
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showToast('Simulator Locked', data.error || 'Admin token required', 'alert');
+      }
+      return res;
+    }
+
     async function triggerQuickBurst(count = 3) {
+      const res = await simulatorFetch('/api/v1/simulate/burst', { count });
+      if (!res.ok) return;
       playSound('burst');
       showToast('Ingress Burst Active', \`+\${count} synthetic leads ingested into triage queue\`, 'info');
-
-      await fetch('/api/v1/simulate/burst', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ count })
-      });
       fetchState();
     }
 
     async function clearDatabase() {
-      await fetch('/api/v1/simulate/clear', { method: 'POST' });
+      const res = await simulatorFetch('/api/v1/simulate/clear');
+      if (!res.ok) return;
       showToast('State Reset', 'Database cleared and initialized to baseline state', 'info');
       closeSimulatorModal();
       fetchState();

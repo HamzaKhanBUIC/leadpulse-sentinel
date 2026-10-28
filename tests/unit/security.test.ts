@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { escapeHtml, isValidLeadId } from '../../src/server/security.js';
+import * as jsImpl from '../../src/server/security.js';
+import * as tsImpl from '../../src/server/security.ts';
+
+const { escapeHtml, isValidLeadId, checkAdminToken, MIN_ADMIN_TOKEN_LENGTH } = jsImpl;
 
 describe('escapeHtml', () => {
   it('escapes the five HTML-significant characters', () => {
@@ -39,5 +42,55 @@ describe('isValidLeadId', () => {
     expect(isValidLeadId('LEAD_ABC')).toBe(false);
     expect(isValidLeadId('')).toBe(false);
     expect(isValidLeadId(undefined)).toBe(false);
+  });
+});
+
+describe('checkAdminToken', () => {
+  const TOKEN = 'test-token-0123456789abcdef';
+
+  it('fails closed with 403 when no token is configured', () => {
+    expect(checkAdminToken(TOKEN, undefined)).toMatchObject({ ok: false, status: 403 });
+    expect(checkAdminToken('', '')).toMatchObject({ ok: false, status: 403 });
+  });
+
+  it('fails closed with 403 when the configured token is too short', () => {
+    const short = 'x'.repeat(MIN_ADMIN_TOKEN_LENGTH - 1);
+    expect(checkAdminToken(short, short)).toMatchObject({ ok: false, status: 403 });
+  });
+
+  it('rejects a missing or wrong token with 401', () => {
+    expect(checkAdminToken(undefined, TOKEN)).toMatchObject({ ok: false, status: 401 });
+    expect(checkAdminToken('', TOKEN)).toMatchObject({ ok: false, status: 401 });
+    expect(checkAdminToken(TOKEN + 'x', TOKEN)).toMatchObject({ ok: false, status: 401 });
+    expect(checkAdminToken('short', TOKEN)).toMatchObject({ ok: false, status: 401 });
+  });
+
+  it('accepts the configured token, including as the first of repeated headers', () => {
+    expect(checkAdminToken(TOKEN, TOKEN)).toEqual({ ok: true });
+    expect(checkAdminToken([TOKEN, 'other'], TOKEN)).toEqual({ ok: true });
+  });
+});
+
+describe('security.js and security.ts stay in sync', () => {
+  const inputs = ['<a href="x">\'&</a>', null, undefined, 7, 'lead_abc123', "x');//", 'lead_'];
+
+  it('exports the same constants', () => {
+    for (const key of ['ADMIN_TOKEN_ENV', 'ADMIN_TOKEN_HEADER', 'MIN_ADMIN_TOKEN_LENGTH', 'MAX_BODY_BYTES', 'MAX_BURST_COUNT'] as const) {
+      expect(tsImpl[key]).toBe(jsImpl[key]);
+    }
+  });
+
+  it('escapes and validates identically', () => {
+    for (const input of inputs) {
+      expect(tsImpl.escapeHtml(input)).toBe(jsImpl.escapeHtml(input));
+      expect(tsImpl.isValidLeadId(input)).toBe(jsImpl.isValidLeadId(input));
+    }
+  });
+
+  it('checks admin tokens identically', () => {
+    const token = 'test-token-0123456789abcdef';
+    for (const [header, configured] of [[token, token], ['nope', token], [undefined, token], [token, undefined], [token, 'short']] as const) {
+      expect(tsImpl.checkAdminToken(header, configured)).toEqual(jsImpl.checkAdminToken(header, configured));
+    }
   });
 });

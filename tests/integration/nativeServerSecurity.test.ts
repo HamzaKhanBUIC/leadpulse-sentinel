@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createHttpServer } from '../../src/server/nativeServer.js';
@@ -76,5 +76,71 @@ describe('Native server output escaping', () => {
     expect(html).toContain('${escapeHtml(lead.customer_name)}');
     expect(html).toContain('${escapeHtml(msg.text)}');
     expect(html).not.toMatch(/\$\{(lead|selectedLead)\.(customer_name|raw_inquiry_text|customer_phone)\}/);
+  });
+});
+
+describe('Native server simulator route guard', () => {
+  const TOKEN = 'test-token-0123456789abcdef';
+  let server: Server;
+  let baseUrl: string;
+  let savedToken: string | undefined;
+
+  beforeAll(async () => {
+    savedToken = process.env.LEADPULSE_ADMIN_TOKEN;
+    server = createHttpServer();
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  afterEach(() => {
+    if (savedToken === undefined) delete process.env.LEADPULSE_ADMIN_TOKEN;
+    else process.env.LEADPULSE_ADMIN_TOKEN = savedToken;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  const post = (path: string, headers: Record<string, string> = {}, body: object = {}) =>
+    fetch(`${baseUrl}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify(body),
+    });
+
+  const leadCount = async () => (await (await fetch(`${baseUrl}/api/v1/leads`)).json()).total_count;
+
+  it('refuses /simulate/clear with 403 when LEADPULSE_ADMIN_TOKEN is unset, and keeps the data', async () => {
+    delete process.env.LEADPULSE_ADMIN_TOKEN;
+    const before = await leadCount();
+    const res = await post('/api/v1/simulate/clear', { 'X-Admin-Token': TOKEN });
+    expect(res.status).toBe(403);
+    expect(await leadCount()).toBe(before);
+    expect(before).toBeGreaterThan(0);
+  });
+
+  it('refuses /simulate/burst with 403 when LEADPULSE_ADMIN_TOKEN is unset', async () => {
+    delete process.env.LEADPULSE_ADMIN_TOKEN;
+    expect((await post('/api/v1/simulate/burst', {}, { count: 3 })).status).toBe(403);
+  });
+
+  it('rejects a missing or wrong token with 401', async () => {
+    process.env.LEADPULSE_ADMIN_TOKEN = TOKEN;
+    expect((await post('/api/v1/simulate/clear')).status).toBe(401);
+    expect((await post('/api/v1/simulate/clear', { 'X-Admin-Token': 'wrong-token-0123456789' })).status).toBe(401);
+  });
+
+  it('caps the burst size and runs with the right token', async () => {
+    process.env.LEADPULSE_ADMIN_TOKEN = TOKEN;
+    const res = await post('/api/v1/simulate/burst', { 'X-Admin-Token': TOKEN }, { count: 100000 });
+    expect(res.status).toBe(200);
+    expect((await res.json()).count).toBe(50);
+  });
+
+  it('clears the store with the right token', async () => {
+    process.env.LEADPULSE_ADMIN_TOKEN = TOKEN;
+    const res = await post('/api/v1/simulate/clear', { 'X-Admin-Token': TOKEN });
+    expect(res.status).toBe(200);
+    expect(await leadCount()).toBe(0);
   });
 });
