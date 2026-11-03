@@ -99,13 +99,25 @@ export const App: React.FC = () => {
     }
   };
 
+  // Simulator routes need the server's LEADPULSE_ADMIN_TOKEN; ask once per browser tab.
+  const simulatorFetch = async (path: string, payload: object = {}) => {
+    const token =
+      sessionStorage.getItem('leadpulse_admin_token') ||
+      window.prompt('Admin token (LEADPULSE_ADMIN_TOKEN) for simulator actions:') ||
+      '';
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) sessionStorage.setItem('leadpulse_admin_token', token);
+    else sessionStorage.removeItem('leadpulse_admin_token');
+    return res;
+  };
+
   const handleQuickBurst = async () => {
     try {
-      await fetch('/api/v1/simulate/burst', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ count: 3 }),
-      });
+      await simulatorFetch('/api/v1/simulate/burst', { count: 3 });
       fetchData();
     } catch (err) {
       console.error('Burst error:', err);
@@ -122,7 +134,7 @@ export const App: React.FC = () => {
   };
 
   const handleClearAndReset = async () => {
-    await fetch('/api/v1/simulate/clear', { method: 'POST' });
+    await simulatorFetch('/api/v1/simulate/clear');
     fetchData();
   };
 
